@@ -1,57 +1,74 @@
-# T1 — Sistemas Operacionais — Processador Mancha
+# T2 — Sistemas Operacionais — Processador Mancha
 
 **Autores:** João Guerra (202512648) e Gustavo Ribeiro (202512653)
 
 ## Descrição
 
-Programa que gera um número pseudoaleatório, escrito no subconjunto de C
-do compilador `mcc` para o processador didático Mancha.
+Núcleo de Sistema Operacional multitarefa preemptivo com escalonamento por
+prioridade dinâmica, escrito para o processador didático Mancha. O kernel
+gerencia múltiplos processos concorrentes, chamadas de sistema via `TRAP 7`,
+entrada/saída assíncrona com bloqueio e coleta de métricas de execução.
 
 ## Estrutura esperada
 
-Este `aleatorio.c` deve ser colocado na **raiz** do repositório do
-Mancha (https://gitlab.inf.ufsm.br/jvlima/mancha), ao lado das pastas
-`compilador_c/` e `simulador_completo/`:
+Os arquivos deste trabalho devem ser colocados em uma pasta (ex: `t2/`)
+dentro da raiz do repositório do Mancha (https://gitlab.inf.ufsm.br/jvlima/mancha),
+ao lado das pastas `compilador_c/` e `simulador_completo/`:
 
 ```
 mancha/
-├── aleatorio.c        <- este arquivo
 ├── compilador_c/
 ├── simulador_completo/
-└── Makefile
+└── t2/
+    ├── Makefile
+    ├── ponte.asm
+    ├── so.c
+    ├── so.h
+    ├── ulib.asm
+    └── usuario.c
 ```
 
 ## Como compilar e rodar
 
+Dentro da pasta do trabalho, compile e execute no simulador:
+
 ```sh
 make
 
-compilador_c/bin/mcc -Icompilador_c/inc aleatorio.c -o aleatorio.asm
-
-simulador_completo/bin/montador compilador_c/rt/runtime.asm compilador_c/rt/biblioteca.asm aleatorio.asm -o aleatorio.mob
-
-simulador_completo/bin/simulador aleatorio.mob
+../simulador_completo/bin/simulador so.mob
 ```
 
-O programa não precisa de nenhuma interação do operador: ele lê o
-relógio do simulador, calcula o número e imprime sozinho, parando
-(`halt`) em seguida. O resultado aparece no painel **"console (saída)"**
-da interface.
+O sistema inicia automaticamente o processo `proc_init`, que cria os
+processos concorrentes de teste (`proc_a`, `proc_b`, `proc_c` e `proc_pai`,
+que cria `proc_filho`). A saída dos caracteres aparece no painel **"console
+(saída)"** e, ao final da execução, o relatório de estatísticas é exibido.
 
-## Como funciona a geração do número
+## Como funciona o Sistema Operacional
 
-O programa lê o contador do relógio do simulador (porta `0020`) como
-semente e aplica sobre ela uma combinação de multiplicação e soma por
-constantes primas, seguida de valor absoluto e módulo 100, para
-produzir um número pseudoaleatório entre 0 e 99:
+* **Chamadas de Sistema (`TRAP 7`):** Programas de usuário invocam serviços
+  do kernel (`SO_LE`, `SO_ESCREVE`, `SO_CRIA_PROC`, `SO_MATA_PROC`,
+  `SO_ESPERA_PROC`) através de `ulib.asm`.
+* **Troca de Contexto (`ponte.asm`):** Salva e restaura os registradores
+  (`PC`, `A`, `X`, `Y`) na tabela de processos (`MAX_PROC = 16`) a cada
+  interrupção de relógio ou `TRAP 7`.
+* **Bloqueio de E/S:** Processos que aguardam o terminal ou outro processo
+  (`espera_proc`) mudam para o estado `BLOQUEADO`, liberando a CPU. Se todos
+  estiverem bloqueados, a CPU executa `HALT` até a próxima interrupção.
+* **Escalonador com Prioridade Dinâmica:** Com quantum de 2 ticks
+  (`QUANTUM_MAX = 2`), cada processo inicia com prioridade `0.5` (menor valor =
+  maior prioridade) e tem sua prioridade atualizada a cada parada pela fórmula:
 
 ```
-resultado = |semente * 31337 + 7919| % 100
+prioridade = (prioridade + (tempo_usado / QUANTUM_MAX)) / 2
 ```
 
 ## Arquivos
 
 | Arquivo | Descrição |
 |---|---|
-| `aleatorio.c` | código-fonte |
-| `aleatorio.asm` | assembly Mancha gerado pelo `mcc` a partir do `.c` |
+| `Makefile` | regras de compilação e montagem para gerar `so.mob` |
+| `so.h` | definições da tabela de processos, estados, syscalls e constantes |
+| `so.c` | implementação do kernel, interrupções, E/S, escalonador e métricas |
+| `ponte.asm` | salvamento e restauração de contexto nas interrupções |
+| `ulib.asm` | interface em assembly (`so_chama`) que executa `TRAP 7` |
+| `usuario.c` | processos de teste em modo usuário |
